@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+import argparse
+import textwrap
+import re
+
+
+TIME_RE = re.compile(
+    r'^\d{1,2}:\d{2}:\d{2}\.\d+,\d{1,2}:\d{2}:\d{2}\.\d+$'
+)
+
+
+def parse_srt_or_sbv(path: str) -> str:
+    lines = []
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+
+            if not line:
+                continue
+
+            if line.isdigit():
+                continue
+
+            if "-->" in line:
+                continue
+
+            if TIME_RE.match(line):
+                continue
+
+            if line.startswith("[") and line.endswith("]"):
+                continue
+
+            lines.append(line)
+
+    return " ".join(lines)
+
+
+def split_into_sentences(text: str):
+    text = text.replace("...", ".")
+
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    return [s.strip() for s in sentences if s.strip()]
+
+
+def format_text_smart(text: str, max_width=60, target_lines=5):
+    sentences = split_into_sentences(text)
+
+    blocks = []
+    current_block = []
+    current_lines = 0
+
+    for sentence in sentences:
+        wrapped = wrapped = textwrap.fill(sentence, width=max_width).split("\n")
+        sentence_lines = len(wrapped)
+
+        if sentence_lines >= target_lines:
+            if current_block:
+                blocks.append("\n".join(current_block))
+                blocks.append("")
+                current_block = []
+                current_lines = 0
+
+            blocks.append("\n".join(wrapped))
+            blocks.append("")
+            continue
+
+        if current_lines + sentence_lines > target_lines:
+            blocks.append("\n".join(current_block))
+            blocks.append("")
+            current_block = []
+            current_lines = 0
+
+        current_block.extend(wrapped)
+        current_lines += sentence_lines
+
+    if current_block:
+        blocks.append("\n".join(current_block))
+
+    return "\n".join(blocks)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="SRT (and SBV) → formatted text (smart)")
+    parser.add_argument("source", help="Input SRT (or SBV) file")
+    parser.add_argument("destination", help="Output text file")
+    parser.add_argument("-l", "--line-length", help="Max characters per line", type=int, default=60, metavar="INT", required=False)
+    parser.add_argument("-b", "--block-lines", help="Target lines per block (won't break sentences)", type=int, default=5, metavar="INT", required=False)
+
+
+    args = parser.parse_args()
+
+    text = parse_srt_or_sbv(args.source)
+    formatted = format_text_smart(text, max_width=args.line_length, target_lines=args.block_lines)
+
+    with open(args.destination, "w", encoding="utf-8") as f:
+        f.write(formatted)
+
+    print("Done!")
+
+
+if __name__ == "__main__":
+    main()
